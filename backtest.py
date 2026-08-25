@@ -1,5 +1,5 @@
 """
-Binance Quant Trader V2 - Backtest Engine (V3)
+Binance Quant Trader V3 - Backtest Engine (V3)
 ================================================
 Backtest with partial take profit simulation.
 Measures: win rate, profit factor, max drawdown, Sharpe, blended R:R.

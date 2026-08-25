@@ -1,5 +1,5 @@
 """
-Binance Quant Trader V2 - SQLite Logger
+Binance Quant Trader V3 - SQLite Logger
 ========================================
 Persistent trade logging, PnL tracking, and audit trail via SQLite.
 """
@@ -27,7 +27,6 @@ class TradeDB:
 
     @contextmanager
     def _conn(self):
-        """Thread-local connection with WAL mode."""
         if not hasattr(self._local, "conn") or self._local.conn is None:
             conn = sqlite3.connect(self.db_path, timeout=30)
             conn.execute("PRAGMA journal_mode=WAL")
@@ -123,10 +122,7 @@ class TradeDB:
     def _utcnow(self):
         return datetime.now(timezone.utc)
 
-    # === Trade Logging ===
-
     def log_trade(self, **kwargs):
-        """Log a trade execution."""
         now = self._utcnow()
         kwargs.setdefault("timestamp", time.time())
         kwargs.setdefault("datetime_utc", now.isoformat())
@@ -143,10 +139,8 @@ class TradeDB:
                 values
             )
             conn.commit()
-        logger.debug(f"Trade logged: {kwargs.get('symbol')} {kwargs.get('side')} {kwargs.get('quantity')}")
 
     def update_trade(self, order_id: int, **kwargs):
-        """Update an existing trade record."""
         set_clause = ", ".join([f"{k} = ?" for k in kwargs.keys()])
         values = list(kwargs.values()) + [order_id]
         with self._conn() as conn:
@@ -156,10 +150,7 @@ class TradeDB:
             )
             conn.commit()
 
-    # === Position Tracking ===
-
     def upsert_position(self, symbol: str, **kwargs):
-        """Insert or update position state."""
         now = self._utcnow()
         kwargs["symbol"] = symbol
         kwargs["last_update"] = time.time()
@@ -178,11 +169,9 @@ class TradeDB:
             )
             conn.commit()
 
-    def get_position(self, symbol: str) -> dict | None:
+    def get_position(self, symbol: str):
         with self._conn() as conn:
-            cursor = conn.execute(
-                "SELECT * FROM positions WHERE symbol = ?", (symbol,)
-            )
+            cursor = conn.execute("SELECT * FROM positions WHERE symbol = ?", (symbol,))
             row = cursor.fetchone()
             if row:
                 cols = [d[0] for d in cursor.description]
@@ -200,8 +189,6 @@ class TradeDB:
             conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
             conn.commit()
 
-    # === Event Logging ===
-
     def log_event(self, event_type: str, symbol: str = None, message: str = "", data: dict = None):
         now = self._utcnow()
         with self._conn() as conn:
@@ -211,8 +198,6 @@ class TradeDB:
                  json.dumps(data) if data else None)
             )
             conn.commit()
-
-    # === Daily PnL ===
 
     def update_daily_pnl(self, realized_pnl: float, commission: float):
         today = self._utcnow().strftime("%Y-%m-%d")
@@ -227,7 +212,7 @@ class TradeDB:
             """, (today, realized_pnl, commission))
             conn.commit()
 
-    def get_daily_pnl(self, date: str = None) -> dict | None:
+    def get_daily_pnl(self, date: str = None):
         if date is None:
             date = self._utcnow().strftime("%Y-%m-%d")
         with self._conn() as conn:
@@ -237,8 +222,6 @@ class TradeDB:
                 cols = [d[0] for d in cursor.description]
                 return dict(zip(cols, row))
         return None
-
-    # === System State ===
 
     def set_state(self, key: str, value):
         with self._conn() as conn:
@@ -255,8 +238,6 @@ class TradeDB:
             if row:
                 return json.loads(row[0])
         return default
-
-    # === Query Helpers ===
 
     def get_recent_trades(self, symbol: str = None, limit: int = 50) -> list:
         with self._conn() as conn:

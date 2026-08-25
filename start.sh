@@ -1,5 +1,5 @@
 #!/bin/bash
-# Binance Quant Trader V2 - Start Script
+# Binance Quant Trader V3 - Start Script
 # ========================================
 # Usage:
 #   ./start.sh          # Start in foreground
@@ -23,7 +23,7 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
 fi
 
 start_foreground() {
-    echo "Starting Binance Quant Trader V2 (foreground)..."
+    echo "Starting Binance Quant Trader V3 (foreground)..."
     cd "$SCRIPT_DIR"
     python main.py "$@"
 }
@@ -37,7 +37,7 @@ start_background() {
         fi
     fi
 
-    echo "Starting Binance Quant Trader V2 (background)..."
+    echo "Starting Binance Quant Trader V3 (background)..."
     cd "$SCRIPT_DIR"
     nohup python main.py >> "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"

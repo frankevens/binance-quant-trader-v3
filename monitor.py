@@ -1,5 +1,5 @@
 """
-Binance Quant Trader V2 - Status Monitor
+Binance Quant Trader V3 - Status Monitor
 ==========================================
 Quick status check: positions, PnL, recent trades, system health.
 Run: python monitor.py
@@ -144,7 +144,7 @@ def show_summary(conn):
 
 def main():
     print("=" * 60)
-    print("  BINANCE QUANT TRADER V2 - STATUS MONITOR")
+    print("  BINANCE QUANT TRADER V3 - STATUS MONITOR")
     print(f"  {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print("=" * 60)
 

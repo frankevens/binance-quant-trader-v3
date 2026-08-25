@@ -48,6 +48,11 @@ Thumbs.db
 ehthumbs.db
 
 # Logs
+
+# Binance Quant Trader V3
+trader_data/
+*.db
+*.log
 output.log
 *.log
 *.log.*

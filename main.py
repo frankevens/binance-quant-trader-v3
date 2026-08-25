@@ -1,25 +1,24 @@
 """
-Binance Quant Trader V2 - Main Entry Point
+Binance Quant Trader V3 - Main Entry Point
 ============================================
 Real trading bot for Binance USDT-M Perpetual Futures.
 
 Symbols: BTC/ETH/BNB/SOL/XRP/DOGE/AVAX/LINK
 Leverage: Up to 10x, Isolated Margin
-Strategy: ATR-based entry/exit with trailing stop
-Risk: Position sizing, daily loss cap, exposure limits
+Strategy: Multi-strategy fusion (Trend + Mean Reversion + Breakout)
+Exit: Partial take profit (50%@2R, 25%@4R, 25% trailing to 8R)
+Risk: Position sizing, daily loss cap, exposure limits, auto-halt
 
 Usage:
     1. Set environment variables:
        export BINANCE_API_KEY="your_api_key"
        export BINANCE_API_SECRET="your_api_secret"
 
-    2. Or edit config.py directly (not recommended for production)
-
-    3. Run:
+    2. Run:
        python main.py
 
-    4. With custom config:
-       python main.py --config my_config.py
+    3. Dry run (validate config):
+       python main.py --dry-run
 
 WARNING: This is a REAL TRADING bot. It uses real funds.
          Make sure you understand the risks before running.
@@ -71,14 +70,17 @@ def setup_logging(config: Config):
 
 def print_banner(config: Config):
     """Print startup banner."""
+    ptp = config.atr.partial_tp
     print("=" * 70)
-    print("  BINANCE QUANT TRADER V2 - REAL TRADING MODE")
-    print("  USDT-M Perpetual Futures")
+    print("  BINANCE QUANT TRADER V3 - REAL TRADING MODE")
+    print("  USDT-M Perpetual Futures | Multi-Strategy Fusion")
     print("=" * 70)
     print(f"  Symbols:    {', '.join(config.symbols)}")
     print(f"  Leverage:   Up to {max(s.leverage for s in config.symbol_configs.values())}x ISOLATED")
-    print(f"  Strategy:   ATR({config.atr.atr_period}) SL={config.atr.atr_sl_multiplier}x "
-          f"TP={config.atr.atr_tp_multiplier}x Trail={config.atr.atr_trailing_multiplier}x")
+    print(f"  Strategy:   Trend + Mean Reversion + Breakout (fusion)")
+    print(f"  Entry:      ATR({config.atr.atr_period}) MinScore={config.atr.min_entry_score}")
+    print(f"  SL:         {config.atr.atr_sl_multiplier}x ATR | Trail: {config.atr.atr_trailing_multiplier}x ATR")
+    print(f"  Partial TP: {ptp.tp1_pct*100:.0f}%@{ptp.tp1_rr}R + {ptp.tp2_pct*100:.0f}%@{ptp.tp2_rr}R + {ptp.tp3_pct*100:.0f}% trail to {ptp.tp3_rr}R")
     print(f"  Risk:       Max pos {config.risk.max_position_pct*100}% | "
           f"Max exposure {config.risk.max_total_exposure_pct*100}% | "
           f"Daily loss {config.risk.max_daily_loss_pct*100}%")
@@ -167,7 +169,7 @@ class TraderApp:
         await self.ws_manager.start()
 
         # Log startup event
-        self.db.log_event("SYSTEM", message="Trader V2 started",
+        self.db.log_event("SYSTEM", message="Trader V3 started",
                          data={"symbols": self.config.symbols})
         self.db.set_state("last_start", datetime.now(timezone.utc).isoformat())
 
@@ -201,7 +203,7 @@ class TraderApp:
             await self.client.close_connection()
 
         # Log shutdown
-        self.db.log_event("SYSTEM", message="Trader V2 stopped")
+        self.db.log_event("SYSTEM", message="Trader V3 stopped")
         self.db.close()
 
         logger.info("Shutdown complete")
@@ -249,7 +251,7 @@ class TraderApp:
 
 async def main():
     """Main async entry point."""
-    parser = argparse.ArgumentParser(description="Binance Quant Trader V2")
+    parser = argparse.ArgumentParser(description="Binance Quant Trader V3")
     parser.add_argument("--config", type=str, help="Path to custom config module")
     parser.add_argument("--dry-run", action="store_true", help="Validate config and exit")
     args = parser.parse_args()

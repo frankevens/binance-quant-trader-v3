@@ -1,5 +1,5 @@
 """
-Binance Quant Trader V2 - ATR Strategy (V3 Ultimate)
+Binance Quant Trader V3 - ATR Strategy (V3 Ultimate)
 =====================================================
 Multi-strategy fusion with partial take profit system.
 
