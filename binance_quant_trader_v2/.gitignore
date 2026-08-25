@@ -1,0 +1,23 @@
+# Binance Quant Trader V2 - Git Ignore
+
+# Environment
+.env
+__pycache__/
+*.pyc
+*.pyo
+
+# Data
+trader_data/
+*.db
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Virtual environment
+venv/
+.venv/
