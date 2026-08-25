@@ -193,6 +193,10 @@ class TradingEngine:
                 await self._close_position(symbol, signal)
                 return
 
+            if signal.signal == "PARTIAL_CLOSE":
+                await self._partial_close_position(symbol, signal)
+                return
+
             if signal.signal in ("LONG", "SHORT"):
                 await self._open_position(symbol, signal)
 
@@ -281,6 +285,55 @@ class TradingEngine:
         except Exception as e:
             logger.error(f"[{symbol}] Close order failed: {e}")
             self.db.log_event("CLOSE_ERROR", symbol, str(e))
+
+    async def _partial_close_position(self, symbol: str, signal):
+        """Partial close: close a percentage of position at TP1/TP2."""
+        position = self.pos_sync.get_position(symbol)
+        if not position:
+            return
+
+        position_amt = position["position_amt"]
+        if position_amt == 0:
+            return
+
+        # Determine close percentage
+        close_pct = signal.tp1_close_pct if signal.tp1_close_pct > 0 else signal.tp2_close_pct
+        if close_pct <= 0:
+            close_pct = 0.5  # Default 50%
+
+        close_qty = abs(position_amt) * close_pct
+        close_qty = self._calculate_quantity(symbol, close_qty * signal.entry_price, signal.entry_price)
+        if close_qty <= 0:
+            return
+
+        side = SIDE_SELL if position_amt > 0 else SIDE_BUY
+
+        try:
+            order = await self._place_order(symbol, side, close_qty, reduce_only=True)
+            if order:
+                remaining = abs(position_amt) - close_qty
+                new_amt = remaining if position_amt > 0 else -remaining
+                self.pos_sync.update_position(symbol, new_amt)
+                self.risk.update_position(symbol, new_amt)
+
+                self.db.log_trade(
+                    symbol=symbol, side=side, position_side="BOTH",
+                    order_type="MARKET", quantity=close_qty,
+                    price=signal.entry_price, status="PARTIAL_CLOSE",
+                    order_id=order.get("orderId"),
+                    strategy_signal="PARTIAL_CLOSE",
+                    notes=f"{close_pct*100:.0f}% closed | {signal.reason}",
+                    raw_response=order,
+                )
+
+                logger.info(
+                    f"[{symbol}] PARTIAL CLOSE: {close_pct*100:.0f}% ({close_qty}) | "
+                    f"remaining={remaining:.6f} | {signal.reason}"
+                )
+
+        except Exception as e:
+            logger.error(f"[{symbol}] Partial close failed: {e}")
+            self.db.log_event("PARTIAL_CLOSE_ERROR", symbol, str(e))
 
     async def _place_order(self, symbol: str, side: str, quantity: float,
                             reduce_only: bool = False) -> Optional[dict]:
