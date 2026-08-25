@@ -31,13 +31,16 @@ class RiskConfig:
 
 @dataclass
 class ATRConfig:
-    """ATR-based stop loss / take profit parameters."""
+    """ATR-based stop loss / take profit parameters (V2 Optimized)."""
     atr_period: int = 14
-    atr_sl_multiplier: float = 2.0
-    atr_tp_multiplier: float = 3.0
-    atr_trailing_multiplier: float = 1.5
+    atr_sl_multiplier: float = 1.5       # Tighter stop: 1.5x ATR (was 2.0)
+    atr_tp_multiplier: float = 3.0       # Keep 3.0x ATR target → R:R = 2:1
+    atr_trailing_multiplier: float = 2.0 # Wider trailing: 2.0x ATR (was 1.5, avoids premature exit)
     kline_interval: str = "15m"
     kline_limit: int = 100
+    htf_interval: str = "1h"             # Higher timeframe for trend filter
+    htf_kline_limit: int = 60
+    min_entry_score: float = 0.65        # Minimum multi-factor score to enter
 
 
 @dataclass

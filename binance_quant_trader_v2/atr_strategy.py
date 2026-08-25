@@ -1,8 +1,8 @@
 """
-Binance Quant Trader V2 - ATR Strategy
-========================================
-ATR (Average True Range) based strategy for entry signals,
-stop loss, take profit, and trailing stop calculations.
+Binance Quant Trader V2 - ATR Strategy (V2 Optimized)
+======================================================
+Multi-factor ATR strategy with RSI, volume, multi-timeframe trend filter.
+Optimized for higher win rate while maintaining 2:1 reward/risk.
 """
 
 import logging
@@ -27,11 +27,24 @@ class ATRSignal:
 
 
 class ATRCalculator:
-    """Calculates ATR and generates trading signals."""
+    """
+    Multi-factor ATR strategy.
+
+    Entry logic (score-based, 0-1.0):
+      Trend filter (HTF EMA):     0.25
+      RSI zone:                   0.20
+      Bollinger position:         0.15
+      LTF EMA alignment:          0.15
+      Volume confirmation:        0.15
+      Candle momentum:            0.10
+
+    Minimum score to enter: 0.65 (configurable)
+    """
 
     def __init__(self, config):
         self.config = config
         self._kline_cache: dict[str, list] = {}
+        self._kline_htf_cache: dict[str, list] = {}  # Higher timeframe
         self._last_signal: dict[str, ATRSignal] = {}
         self._mark_prices: dict[str, float] = {}
 
@@ -40,6 +53,12 @@ class ATRCalculator:
 
     def update_klines(self, symbol: str, klines: list):
         self._kline_cache[symbol] = klines
+
+    def update_klines_htf(self, symbol: str, klines: list):
+        """Update higher timeframe klines (e.g. 1h for 15m strategy)."""
+        self._kline_htf_cache[symbol] = klines
+
+    # === Indicator Calculations ===
 
     def calculate_atr(self, symbol: str) -> Optional[float]:
         klines = self._kline_cache.get(symbol)
@@ -65,30 +84,64 @@ class ATRCalculator:
 
         return float(np.mean(tr_list[-period:]))
 
-    def calculate_ema(self, symbol: str, period: int = 20) -> Optional[float]:
-        klines = self._kline_cache.get(symbol)
-        if not klines or len(klines) < period:
-            return None
-
-        closes = np.array([float(k[4]) for k in klines[-period * 2:]])
+    def calculate_ema(self, closes: np.ndarray, period: int) -> Optional[float]:
         if len(closes) < period:
             return None
-
         multiplier = 2.0 / (period + 1)
         ema = float(closes[0])
         for price in closes[1:]:
             ema = (float(price) - ema) * multiplier + ema
         return ema
 
-    def calculate_bollinger(self, symbol: str, period: int = 20, std_dev: float = 2.0):
+    def calculate_rsi(self, symbol: str, period: int = 14) -> Optional[float]:
+        """Calculate RSI."""
         klines = self._kline_cache.get(symbol)
-        if not klines or len(klines) < period:
-            return None, None, None
+        if not klines or len(klines) < period + 1:
+            return None
 
-        closes = np.array([float(k[4]) for k in klines[-period:]])
-        sma = float(np.mean(closes))
-        std = float(np.std(closes))
+        closes = np.array([float(k[4]) for k in klines[-(period + 2):]])
+        deltas = np.diff(closes)
+
+        gains = np.where(deltas > 0, deltas, 0)
+        losses = np.where(deltas < 0, -deltas, 0)
+
+        avg_gain = np.mean(gains)
+        avg_loss = np.mean(losses)
+
+        if avg_loss == 0:
+            return 100.0
+        rs = avg_gain / avg_loss
+        return float(100.0 - (100.0 / (1.0 + rs)))
+
+    def calculate_volume_ratio(self, symbol: str, period: int = 20) -> Optional[float]:
+        """Current volume / average volume ratio."""
+        klines = self._kline_cache.get(symbol)
+        if not klines or len(klines) < period + 1:
+            return None
+
+        volumes = np.array([float(k[5]) for k in klines[-period:]])
+        current_vol = volumes[-1]
+        avg_vol = np.mean(volumes[:-1])
+
+        if avg_vol == 0:
+            return 1.0
+        return float(current_vol / avg_vol)
+
+    def calculate_bollinger(self, closes: np.ndarray, period: int = 20, std_dev: float = 2.0):
+        if len(closes) < period:
+            return None, None, None
+        subset = closes[-period:]
+        sma = float(np.mean(subset))
+        std = float(np.std(subset))
         return sma + std_dev * std, sma, sma - std_dev * std
+
+    def _get_closes(self, symbol: str) -> Optional[np.ndarray]:
+        klines = self._kline_cache.get(symbol)
+        if not klines:
+            return None
+        return np.array([float(k[4]) for k in klines])
+
+    # === Signal Generation ===
 
     def generate_signal(self, symbol: str, current_position_amt: float = 0) -> Optional[ATRSignal]:
         atr = self.calculate_atr(symbol)
@@ -99,11 +152,18 @@ class ATRCalculator:
         if mark_price is None:
             return None
 
-        ema_short = self.calculate_ema(symbol, 10)
-        ema_long = self.calculate_ema(symbol, 30)
-        bb_upper, bb_mid, bb_lower = self.calculate_bollinger(symbol)
+        closes = self._get_closes(symbol)
+        if closes is None or len(closes) < 35:
+            return None
 
-        if ema_short is None or ema_long is None or bb_upper is None:
+        # Calculate all indicators
+        ema10 = self.calculate_ema(closes, 10)
+        ema30 = self.calculate_ema(closes, 30)
+        rsi = self.calculate_rsi(symbol)
+        vol_ratio = self.calculate_volume_ratio(symbol)
+        bb_upper, bb_mid, bb_lower = self.calculate_bollinger(closes)
+
+        if any(v is None for v in [ema10, ema30, rsi, vol_ratio, bb_upper]):
             return None
 
         cfg = self.config.atr
@@ -111,9 +171,9 @@ class ATRCalculator:
         take_profit_dist = cfg.atr_tp_multiplier * atr
         trailing_dist = cfg.atr_trailing_multiplier * atr
 
+        # === Position Management (unchanged logic) ===
         last = self._last_signal.get(symbol)
 
-        # Existing position management
         if current_position_amt > 0 and last:
             if mark_price <= last.stop_loss:
                 return ATRSignal(symbol=symbol, signal="CLOSE_LONG", entry_price=mark_price,
@@ -153,57 +213,177 @@ class ATRCalculator:
                 atr_value=atr, stop_loss=0, take_profit=0, trailing_stop=0,
                 confidence=0, reason="Position already open")
 
-        # Entry signals
-        klines = self._kline_cache.get(symbol, [])
+        # === Multi-Factor Entry Scoring ===
 
-        long_confidence = 0.0
+        # --- LONG scoring ---
+        long_score = 0.0
         long_reasons = []
-        if mark_price <= bb_lower:
-            long_confidence += 0.4
-            long_reasons.append("price_below_lower_bb")
-        if ema_short > ema_long:
-            long_confidence += 0.3
-            long_reasons.append("ema_uptrend")
-        if len(klines) >= 2:
-            if float(klines[-1][4]) > float(klines[-2][4]):
-                long_confidence += 0.2
-                long_reasons.append("bullish_candle")
-        if mark_price < ema_short:
-            long_confidence += 0.1
-            long_reasons.append("below_short_ema")
 
-        short_confidence = 0.0
+        # 1. HTF Trend filter (25% weight) - use 1h EMA if available, else 30 EMA as proxy
+        htf_klines = self._kline_htf_cache.get(symbol)
+        if htf_klines and len(htf_klines) >= 30:
+            htf_closes = np.array([float(k[4]) for k in htf_klines])
+            htf_ema20 = self.calculate_ema(htf_closes, 20)
+            htf_ema50 = self.calculate_ema(htf_closes, 50)
+            if htf_ema20 and htf_ema50:
+                if htf_ema20 > htf_ema50 and mark_price > htf_ema20:
+                    long_score += 0.25
+                    long_reasons.append("htf_uptrend")
+                elif htf_ema20 < htf_ema50 and mark_price < htf_ema20:
+                    long_score -= 0.15  # Penalty: counter-trend
+                    long_reasons.append("htf_downtrend_penalty")
+        else:
+            # Fallback: use LTF EMA30 as trend proxy
+            if ema30 and mark_price > ema30:
+                long_score += 0.15
+                long_reasons.append("above_ema30")
+
+        # 2. RSI zone (20% weight) - best entry: RSI 30-45 (oversold bounce)
+        if 30 <= rsi <= 45:
+            long_score += 0.20
+            long_reasons.append(f"rsi_oversold_zone({rsi:.0f})")
+        elif 45 < rsi <= 55:
+            long_score += 0.10
+            long_reasons.append(f"rsi_neutral({rsi:.0f})")
+        elif rsi < 30:
+            long_score += 0.05  # Too oversold = strong downtrend, risky
+            long_reasons.append(f"rsi_deep_oversold({rsi:.0f})")
+        elif rsi > 70:
+            long_score -= 0.10  # Penalty: overbought
+            long_reasons.append(f"rsi_overbought_penalty({rsi:.0f})")
+
+        # 3. Bollinger position (15% weight)
+        if mark_price <= bb_lower:
+            long_score += 0.15
+            long_reasons.append("below_lower_bb")
+        elif mark_price <= bb_mid:
+            long_score += 0.08
+            long_reasons.append("below_mid_bb")
+
+        # 4. LTF EMA alignment (15% weight)
+        if ema10 > ema30:
+            long_score += 0.15
+            long_reasons.append("ema_bullish_cross")
+        elif ema10 > ema30 * 0.998:
+            long_score += 0.05
+            long_reasons.append("ema_near_cross")
+
+        # 5. Volume confirmation (15% weight)
+        if vol_ratio >= 1.5:
+            long_score += 0.15
+            long_reasons.append(f"high_volume({vol_ratio:.1f}x)")
+        elif vol_ratio >= 1.0:
+            long_score += 0.08
+            long_reasons.append(f"normal_volume({vol_ratio:.1f}x)")
+        elif vol_ratio < 0.5:
+            long_score -= 0.05
+            long_reasons.append(f"low_volume_penalty({vol_ratio:.1f}x)")
+
+        # 6. Candle momentum (10% weight)
+        klines = self._kline_cache.get(symbol, [])
+        if len(klines) >= 3:
+            c1 = float(klines[-1][4])
+            c2 = float(klines[-2][4])
+            c3 = float(klines[-3][4])
+            if c1 > c2 > c3:
+                long_score += 0.10
+                long_reasons.append("strong_bullish_momentum")
+            elif c1 > c2:
+                long_score += 0.05
+                long_reasons.append("bullish_candle")
+
+        # --- SHORT scoring ---
+        short_score = 0.0
         short_reasons = []
+
+        # 1. HTF Trend
+        if htf_klines and len(htf_klines) >= 30:
+            htf_closes = np.array([float(k[4]) for k in htf_klines])
+            htf_ema20 = self.calculate_ema(htf_closes, 20)
+            htf_ema50 = self.calculate_ema(htf_closes, 50)
+            if htf_ema20 and htf_ema50:
+                if htf_ema20 < htf_ema50 and mark_price < htf_ema20:
+                    short_score += 0.25
+                    short_reasons.append("htf_downtrend")
+                elif htf_ema20 > htf_ema50 and mark_price > htf_ema20:
+                    short_score -= 0.15
+                    short_reasons.append("htf_uptrend_penalty")
+        else:
+            if ema30 and mark_price < ema30:
+                short_score += 0.15
+                short_reasons.append("below_ema30")
+
+        # 2. RSI zone
+        if 55 <= rsi <= 70:
+            short_score += 0.20
+            short_reasons.append(f"rsi_overbought_zone({rsi:.0f})")
+        elif 45 < rsi < 55:
+            short_score += 0.10
+            short_reasons.append(f"rsi_neutral({rsi:.0f})")
+        elif rsi > 70:
+            short_score += 0.05
+            short_reasons.append(f"rsi_deep_overbought({rsi:.0f})")
+        elif rsi < 30:
+            short_score -= 0.10
+            short_reasons.append(f"rsi_oversold_penalty({rsi:.0f})")
+
+        # 3. Bollinger
         if mark_price >= bb_upper:
-            short_confidence += 0.4
-            short_reasons.append("price_above_upper_bb")
-        if ema_short < ema_long:
-            short_confidence += 0.3
-            short_reasons.append("ema_downtrend")
-        if len(klines) >= 2:
-            if float(klines[-1][4]) < float(klines[-2][4]):
-                short_confidence += 0.2
+            short_score += 0.15
+            short_reasons.append("above_upper_bb")
+        elif mark_price >= bb_mid:
+            short_score += 0.08
+            short_reasons.append("above_mid_bb")
+
+        # 4. LTF EMA
+        if ema10 < ema30:
+            short_score += 0.15
+            short_reasons.append("ema_bearish_cross")
+        elif ema10 < ema30 * 1.002:
+            short_score += 0.05
+            short_reasons.append("ema_near_cross")
+
+        # 5. Volume
+        if vol_ratio >= 1.5:
+            short_score += 0.15
+            short_reasons.append(f"high_volume({vol_ratio:.1f}x)")
+        elif vol_ratio >= 1.0:
+            short_score += 0.08
+            short_reasons.append(f"normal_volume({vol_ratio:.1f}x)")
+        elif vol_ratio < 0.5:
+            short_score -= 0.05
+            short_reasons.append(f"low_volume_penalty({vol_ratio:.1f}x)")
+
+        # 6. Candle momentum
+        if len(klines) >= 3:
+            c1 = float(klines[-1][4])
+            c2 = float(klines[-2][4])
+            c3 = float(klines[-3][4])
+            if c1 < c2 < c3:
+                short_score += 0.10
+                short_reasons.append("strong_bearish_momentum")
+            elif c1 < c2:
+                short_score += 0.05
                 short_reasons.append("bearish_candle")
-        if mark_price > ema_short:
-            short_confidence += 0.1
-            short_reasons.append("above_short_ema")
+
+        # === Decision ===
+        MIN_SCORE = getattr(cfg, 'min_entry_score', 0.65)
 
         signal = "HOLD"
         confidence = 0.0
         reasons = []
         sl_price = 0.0
         tp_price = 0.0
-        MIN_CONFIDENCE = 0.6
 
-        if long_confidence >= MIN_CONFIDENCE and long_confidence > short_confidence:
+        if long_score >= MIN_SCORE and long_score > short_score:
             signal = "LONG"
-            confidence = long_confidence
+            confidence = min(long_score, 1.0)
             reasons = long_reasons
             sl_price = mark_price - stop_loss_dist
             tp_price = mark_price + take_profit_dist
-        elif short_confidence >= MIN_CONFIDENCE and short_confidence > long_confidence:
+        elif short_score >= MIN_SCORE and short_score > long_score:
             signal = "SHORT"
-            confidence = short_confidence
+            confidence = min(short_score, 1.0)
             reasons = short_reasons
             sl_price = mark_price + stop_loss_dist
             tp_price = mark_price - take_profit_dist
@@ -212,14 +392,16 @@ class ATRCalculator:
             result = ATRSignal(
                 symbol=symbol, signal=signal, entry_price=mark_price, atr_value=atr,
                 stop_loss=sl_price, take_profit=tp_price, trailing_stop=sl_price,
-                confidence=confidence, reason=" | ".join(reasons)
+                confidence=confidence,
+                reason=" | ".join(reasons) + f" | RSI={rsi:.0f} Vol={vol_ratio:.1f}x"
             )
             self._last_signal[symbol] = result
+            logger.info(f"[{symbol}] {signal} score={confidence:.2f} reasons={reasons}")
             return result
 
         return ATRSignal(symbol=symbol, signal="HOLD", entry_price=mark_price,
             atr_value=atr, stop_loss=0, take_profit=0, trailing_stop=0,
-            confidence=0, reason="No signal")
+            confidence=0, reason=f"No signal | L={long_score:.2f} S={short_score:.2f} RSI={rsi:.0f}")
 
     def get_atr_value(self, symbol: str) -> Optional[float]:
         return self.calculate_atr(symbol)

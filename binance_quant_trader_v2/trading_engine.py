@@ -67,6 +67,7 @@ class TradingEngine:
 
         for symbol in self.config.symbols:
             await self._fetch_initial_klines(symbol)
+            await self._fetch_initial_klines_htf(symbol)
             await asyncio.sleep(0.1)
 
         logger.info("Trading engine initialized")
@@ -79,9 +80,21 @@ class TradingEngine:
                 limit=self.config.atr.kline_limit
             )
             self.atr.update_klines(symbol, klines)
-            logger.info(f"{symbol}: loaded {len(klines)} klines, ATR={self.atr.calculate_atr(symbol):.4f}")
+            logger.info(f"{symbol}: loaded {len(klines)} klines ({self.config.atr.kline_interval}), ATR={self.atr.calculate_atr(symbol):.4f}")
         except Exception as e:
             logger.error(f"{symbol}: failed to fetch klines: {e}")
+
+    async def _fetch_initial_klines_htf(self, symbol: str):
+        try:
+            klines = await self.client.futures_klines(
+                symbol=symbol,
+                interval=self.config.atr.htf_interval,
+                limit=self.config.atr.htf_kline_limit
+            )
+            self.atr.update_klines_htf(symbol, klines)
+            logger.info(f"{symbol}: loaded {len(klines)} HTF klines ({self.config.atr.htf_interval})")
+        except Exception as e:
+            logger.error(f"{symbol}: failed to fetch HTF klines: {e}")
 
     async def start(self):
         self._running = True
@@ -131,6 +144,29 @@ class TradingEngine:
 
     async def _run_strategy(self, symbol: str):
         try:
+            # Refresh klines before signal generation
+            try:
+                klines = await self.client.futures_klines(
+                    symbol=symbol,
+                    interval=self.config.atr.kline_interval,
+                    limit=self.config.atr.kline_limit
+                )
+                self.atr.update_klines(symbol, klines)
+            except Exception:
+                pass
+
+            # Refresh HTF klines every 5th cycle (~75s)
+            if int(time.time()) % 75 < 2:
+                try:
+                    htf_klines = await self.client.futures_klines(
+                        symbol=symbol,
+                        interval=self.config.atr.htf_interval,
+                        limit=self.config.atr.htf_kline_limit
+                    )
+                    self.atr.update_klines_htf(symbol, htf_klines)
+                except Exception:
+                    pass
+
             position_amt = self.pos_sync.get_position_amt(symbol)
             signal = self.atr.generate_signal(symbol, position_amt)
 
