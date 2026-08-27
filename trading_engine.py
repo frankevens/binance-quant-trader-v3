@@ -15,7 +15,7 @@ from binance import AsyncClient
 from binance.enums import (
     SIDE_BUY, SIDE_SELL,
     ORDER_TYPE_MARKET, ORDER_TYPE_LIMIT,
-    FUTURES_ORDER_TYPE_MARKET,
+    FUTURE_ORDER_TYPE_MARKET,
 )
 
 logger = logging.getLogger("trader.engine")
@@ -341,7 +341,7 @@ class TradingEngine:
             if self.config.order_type == "MARKET":
                 order = await self.client.futures_create_order(
                     symbol=symbol, side=side,
-                    type=FUTURES_ORDER_TYPE_MARKET,
+                    type=FUTURE_ORDER_TYPE_MARKET,
                     quantity=quantity, reduceOnly=reduce_only,
                 )
             else:

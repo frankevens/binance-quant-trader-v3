@@ -144,7 +144,7 @@ class ATRCalculator:
         klines = self._kline_cache.get(symbol)
         if not klines or len(klines) < period + 1:
             return None
-        volumes = np.array([float(k[5]) for k in klines[-period:])
+        volumes = np.array([float(k[5]) for k in klines[-period:]])
         avg_vol = np.mean(volumes[:-1])
         if avg_vol == 0:
             return 1.0
