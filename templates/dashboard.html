@@ -284,6 +284,56 @@
             </div>
         </div>
 
+        <!-- V4 Optimized Backtest Results -->
+        <div class="panel" style="margin-bottom: 20px; border-left: 3px solid #58a6ff;">
+            <div class="panel-header" style="font-size:16px;">
+                🚀 V4 Optimized Backtest (TP=+60% / SL=-30% / Trailing Stop)
+                <span style="font-size:12px;color:#8b949e;margin-left:10px;">10x Leverage | Score≥0.75 | Trailing Stop @ 1.5%</span>
+            </div>
+            <div class="panel-body">
+                <div class="stats-grid" style="margin-bottom:16px;">
+                    <div class="stat-card">
+                        <div class="label">Total Trades</div>
+                        <div class="value" id="v4TotalTrades">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Avg Win Rate</div>
+                        <div class="value" id="v4WinRate">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Total PnL</div>
+                        <div class="value" id="v4TotalPnl">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Avg Profit Factor</div>
+                        <div class="value" id="v4PF">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Avg Max Drawdown</div>
+                        <div class="value" id="v4DD">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Avg Holding</div>
+                        <div class="value" id="v4Holding">-</div>
+                    </div>
+                </div>
+                <table style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Trades</th>
+                            <th>Win Rate</th>
+                            <th>PnL</th>
+                            <th>Profit Factor</th>
+                            <th>Max DD</th>
+                            <th>Avg Holding (bars)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="v4Table"></tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- Charts -->
         <div class="grid-2">
             <div class="panel">
@@ -583,8 +633,40 @@
             } catch (e) {}
         }
 
+        async function fetchV4() {
+            try {
+                const res = await fetch('/api/v4/summary');
+                const d = await res.json();
+                if (d.overall) {
+                    document.getElementById('v4TotalTrades').textContent = d.overall.total_trades;
+                    document.getElementById('v4WinRate').textContent = d.overall.win_rate + '%';
+                    document.getElementById('v4WinRate').className = 'value ' + (d.overall.win_rate >= 50 ? 'positive' : 'negative');
+                    const pnlEl = document.getElementById('v4TotalPnl');
+                    pnlEl.textContent = fmtPnl(d.overall.total_pnl);
+                    pnlEl.className = 'value ' + (d.overall.total_pnl >= 0 ? 'positive' : 'negative');
+                    document.getElementById('v4PF').textContent = d.overall.avg_profit_factor.toFixed(2);
+                    document.getElementById('v4PF').className = 'value ' + (d.overall.avg_profit_factor >= 1 ? 'positive' : 'negative');
+                    document.getElementById('v4DD').textContent = d.overall.avg_max_drawdown.toFixed(2) + '%';
+                    document.getElementById('v4Holding').textContent = d.overall.avg_holding_bars + ' bars';
+                }
+                if (d.symbols) {
+                    document.getElementById('v4Table').innerHTML = d.symbols.map(s => `
+                        <tr>
+                            <td><strong>${s.symbol}</strong></td>
+                            <td>${s.total_trades}</td>
+                            <td style="color:${s.win_rate >= 50 ? '#3fb950' : '#f85149'}">${s.win_rate}%</td>
+                            <td style="color:${s.total_pnl >= 0 ? '#3fb950' : '#f85149'}">${fmtPnl(s.total_pnl)}</td>
+                            <td style="color:${s.profit_factor >= 1 ? '#3fb950' : '#f85149'}">${s.profit_factor ? s.profit_factor.toFixed(2) : 'N/A'}</td>
+                            <td>${s.max_drawdown ? s.max_drawdown.toFixed(2) + '%' : 'N/A'}</td>
+                            <td>${s.avg_holding_bars ? s.avg_holding_bars.toFixed(0) : 'N/A'}</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (e) {}
+        }
+
         async function refreshAll() {
-            await Promise.all([fetchStatus(), fetchPositions(), fetchTrades(), fetchDailyPnl(), fetchSymbols(), fetchConfig(), fetchBacktest()]);
+            await Promise.all([fetchStatus(), fetchPositions(), fetchTrades(), fetchDailyPnl(), fetchSymbols(), fetchConfig(), fetchBacktest(), fetchV4()]);
         }
 
         initCharts();

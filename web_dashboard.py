@@ -273,6 +273,60 @@ def api_backtest_trades():
         return jsonify({'error': str(e)})
 
 
+@app.route('/api/v4/summary')
+def api_v4_summary():
+    """Get V4 optimized backtest summary"""
+    try:
+        conn = get_market_db()
+        rows = conn.execute("SELECT * FROM v4_backtest_results").fetchall()
+        conn.close()
+        data = []
+        for r in rows:
+            d = dict(r)
+            if d.get('avg_rr') == float('inf') or d.get('avg_rr') == float('-inf'):
+                d['avg_rr'] = None
+            d['max_drawdown'] = round(d.get('max_drawdown', 0) * 100, 2)
+            data.append(d)
+        total_trades = sum(r['total_trades'] for r in data)
+        total_wins = sum(r['winners'] for r in data)
+        total_pnl = sum(r['total_pnl'] for r in data)
+        avg_wr = total_wins / total_trades * 100 if total_trades > 0 else 0
+        avg_pf = sum(r.get('profit_factor', 0) or 0 for r in data) / len(data) if data else 0
+        avg_dd = sum(r.get('max_drawdown', 0) or 0 for r in data) / len(data) if data else 0
+        avg_holding = sum(r.get('avg_holding_bars', 0) or 0 for r in data) / len(data) if data else 0
+        return jsonify({
+            'symbols': data,
+            'overall': {
+                'total_trades': total_trades,
+                'win_rate': round(avg_wr, 1),
+                'total_pnl': round(total_pnl, 2),
+                'avg_profit_factor': round(avg_pf, 2),
+                'avg_max_drawdown': round(avg_dd, 2),
+                'avg_holding_bars': round(avg_holding, 0),
+                'tp_target': 60,
+                'sl_target': -30,
+                'leverage': 10,
+                'version': 'V4'
+            }
+        })
+    except Exception as e:
+        return jsonify({'symbols': [], 'overall': {}, 'error': str(e)})
+
+
+@app.route('/api/v4/trades')
+def api_v4_trades():
+    """Get V4 backtest trade list"""
+    try:
+        conn = get_market_db()
+        rows = conn.execute(
+            "SELECT * FROM v4_backtest_trades ORDER BY entry_time DESC LIMIT 100"
+        ).fetchall()
+        conn.close()
+        return jsonify([dict(r) for r in rows])
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
 @app.route('/api/backtest/klines')
 def api_backtest_klines():
     """Get kline data for chart"""
