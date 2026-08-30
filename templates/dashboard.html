@@ -238,6 +238,52 @@
             </div>
         </div>
 
+        <!-- Backtest Results -->
+        <div class="panel" style="margin-bottom: 20px;">
+            <div class="panel-header" style="font-size:16px;">
+                📊 Backtest Results (30-Day Historical Data)
+                <span style="font-size:12px;color:#8b949e;margin-left:10px;">Score≥0.65 | SL=0.8ATR | TP1=2R/TP2=3R/TP3=8R</span>
+            </div>
+            <div class="panel-body">
+                <div class="stats-grid" style="margin-bottom:16px;">
+                    <div class="stat-card">
+                        <div class="label">Total Trades</div>
+                        <div class="value" id="btTotalTrades">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Avg Win Rate</div>
+                        <div class="value" id="btWinRate">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Total PnL</div>
+                        <div class="value" id="btTotalPnl">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Avg Profit Factor</div>
+                        <div class="value" id="btPF">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Avg Max Drawdown</div>
+                        <div class="value" id="btDD">-</div>
+                    </div>
+                </div>
+                <table style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Trades</th>
+                            <th>Win Rate</th>
+                            <th>PnL</th>
+                            <th>Profit Factor</th>
+                            <th>Max DD</th>
+                            <th>Avg R:R</th>
+                        </tr>
+                    </thead>
+                    <tbody id="btTable"></tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- Charts -->
         <div class="grid-2">
             <div class="panel">
@@ -506,8 +552,39 @@
             } catch (e) {}
         }
 
+        async function fetchBacktest() {
+            try {
+                const res = await fetch('/api/backtest/summary');
+                const d = await res.json();
+                if (d.overall) {
+                    document.getElementById('btTotalTrades').textContent = d.overall.total_trades;
+                    document.getElementById('btWinRate').textContent = d.overall.win_rate + '%';
+                    document.getElementById('btWinRate').className = 'value ' + (d.overall.win_rate >= 50 ? 'positive' : 'negative');
+                    const pnlEl = document.getElementById('btTotalPnl');
+                    pnlEl.textContent = fmtPnl(d.overall.total_pnl);
+                    pnlEl.className = 'value ' + (d.overall.total_pnl >= 0 ? 'positive' : 'negative');
+                    document.getElementById('btPF').textContent = d.overall.avg_profit_factor.toFixed(2);
+                    document.getElementById('btPF').className = 'value ' + (d.overall.avg_profit_factor >= 1 ? 'positive' : 'negative');
+                    document.getElementById('btDD').textContent = d.overall.avg_max_drawdown.toFixed(2) + '%';
+                }
+                if (d.symbols) {
+                    document.getElementById('btTable').innerHTML = d.symbols.map(s => `
+                        <tr>
+                            <td><strong>${s.symbol}</strong></td>
+                            <td>${s.total_trades}</td>
+                            <td style="color:${s.win_rate >= 50 ? '#3fb950' : '#f85149'}">${s.win_rate}%</td>
+                            <td style="color:${s.total_pnl >= 0 ? '#3fb950' : '#f85149'}">${fmtPnl(s.total_pnl)}</td>
+                            <td style="color:${s.profit_factor >= 1 ? '#3fb950' : '#f85149'}">${s.profit_factor.toFixed(2)}</td>
+                            <td>${s.max_drawdown.toFixed(2)}%</td>
+                            <td>${s.avg_rr.toFixed(2)}</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (e) {}
+        }
+
         async function refreshAll() {
-            await Promise.all([fetchStatus(), fetchPositions(), fetchTrades(), fetchDailyPnl(), fetchSymbols(), fetchConfig()]);
+            await Promise.all([fetchStatus(), fetchPositions(), fetchTrades(), fetchDailyPnl(), fetchSymbols(), fetchConfig(), fetchBacktest()]);
         }
 
         initCharts();

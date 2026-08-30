@@ -206,6 +206,84 @@ def api_config():
     })
 
 
+MARKET_DB_PATH = os.path.join(os.path.dirname(__file__), 'trader_data', 'market_data.db')
+
+
+def get_market_db():
+    conn = sqlite3.connect(MARKET_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+@app.route('/api/backtest/summary')
+def api_backtest_summary():
+    """Get backtest summary for all symbols"""
+    try:
+        conn = get_market_db()
+        rows = conn.execute(
+            "SELECT symbol, total_trades, winners, losers, win_rate, total_pnl, "
+            "avg_pnl_per_trade, max_drawdown, profit_factor, avg_rr, run_time "
+            "FROM backtest_results ORDER BY total_pnl DESC"
+        ).fetchall()
+        conn.close()
+        data = [dict(r) for r in rows]
+        # Calculate overall stats
+        total_trades = sum(r['total_trades'] for r in data)
+        total_wins = sum(r['winners'] for r in data)
+        total_pnl = sum(r['total_pnl'] for r in data)
+        avg_wr = total_wins / total_trades * 100 if total_trades > 0 else 0
+        avg_pf = sum(r['profit_factor'] for r in data) / len(data) if data else 0
+        avg_dd = sum(r['max_drawdown'] for r in data) / len(data) if data else 0
+        return jsonify({
+            'symbols': data,
+            'overall': {
+                'total_trades': total_trades,
+                'win_rate': round(avg_wr, 1),
+                'total_pnl': round(total_pnl, 2),
+                'avg_profit_factor': round(avg_pf, 2),
+                'avg_max_drawdown': round(avg_dd, 2),
+            }
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'symbols': [], 'overall': {}})
+
+
+@app.route('/api/backtest/trades')
+def api_backtest_trades():
+    """Get backtest trade list"""
+    try:
+        conn = get_market_db()
+        rows = conn.execute(
+            "SELECT bt.symbol, bt.side, bt.entry_price, bt.exit_price, bt.pnl, "
+            "bt.rr, bt.is_winner, bt.exit_reason "
+            "FROM backtest_trades bt "
+            "ORDER BY bt.id DESC LIMIT 100"
+        ).fetchall()
+        conn.close()
+        return jsonify([dict(r) for r in rows])
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+@app.route('/api/backtest/klines')
+def api_backtest_klines():
+    """Get kline data for chart"""
+    symbol = request.args.get('symbol', 'BTCUSDT')
+    try:
+        conn = get_market_db()
+        rows = conn.execute(
+            "SELECT open_time, open, high, low, close, volume "
+            "FROM klines WHERE symbol = ? ORDER BY open_time DESC LIMIT 200",
+            (symbol,)
+        ).fetchall()
+        conn.close()
+        data = [dict(r) for r in rows]
+        data.reverse()
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
 if __name__ == '__main__':
     print("\n" + "=" * 60)
     print("  Binance Quant Trader V3 - Web Dashboard")
