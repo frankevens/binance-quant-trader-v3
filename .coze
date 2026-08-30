@@ -1,0 +1,14 @@
+[project]
+name = "binance-quant-trader-v3"
+type = "python"
+description = "Binance USDT-M Perpetual Futures Automated Trading Bot V3"
+
+[project.startup]
+command = "python3 main.py"
+args = ["--web"]
+
+[project.dependencies]
+install = "pip3 install -r requirements.txt"
+
+[project.env]
+file = ".env"
