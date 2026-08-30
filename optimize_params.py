@@ -263,16 +263,20 @@ def simulate_backtest(
             else:
                 score -= 0.25
 
-            # LONG signal
-            if score >= params.min_score and rsi[i] < 55:
+            # Trend regime detection
+            regime_bull = ema_fast[i] > ema_slow[i] * 1.005
+            regime_bear = ema_fast[i] < ema_slow[i] * 0.995
+
+            # LONG signal (suppress in bear regime)
+            if score >= params.min_score and rsi[i] < 55 and not regime_bear:
                 in_position = True
                 entry_price = price
                 position_side = "LONG"
                 entry_atr = atr[i]
                 partial_closed = False
 
-            # SHORT signal
-            elif score <= -params.min_score and rsi[i] > 45:
+            # SHORT signal (suppress in bull regime)
+            elif score <= -params.min_score and rsi[i] > 45 and not regime_bull:
                 in_position = True
                 entry_price = price
                 position_side = "SHORT"

@@ -178,6 +178,37 @@ class ATRCalculator:
         highs = [float(k[2]) for k in klines[-lookback:]]
         return max(highs)
 
+    def detect_trend_regime(self, symbol: str) -> str:
+        """Detect market regime using HTF data.
+        Returns: 'strong_bull', 'bull', 'range', 'bear', 'strong_bear'
+        """
+        htf_klines = self._kline_htf_cache.get(symbol)
+        if not htf_klines or len(htf_klines) < 50:
+            return "range"
+
+        htf_closes = np.array([float(k[4]) for k in htf_klines])
+        htf_ema20 = self.calculate_ema(htf_closes, 20)
+        htf_ema50 = self.calculate_ema(htf_closes, 50)
+        if htf_ema20 is None or htf_ema50 is None:
+            return "range"
+
+        current_price = float(htf_closes[-1])
+        ema_spread = (htf_ema20 - htf_ema50) / htf_ema50
+
+        # Strong bull: price > EMA20 > EMA50, spread > 2%
+        if current_price > htf_ema20 > htf_ema50 and ema_spread > 0.02:
+            return "strong_bull"
+        # Bull: EMA20 > EMA50, price > EMA50
+        elif htf_ema20 > htf_ema50 and current_price > htf_ema50:
+            return "bull"
+        # Strong bear: price < EMA20 < EMA50, spread < -2%
+        elif current_price < htf_ema20 < htf_ema50 and ema_spread < -0.02:
+            return "strong_bear"
+        # Bear: EMA20 < EMA50, price < EMA50
+        elif htf_ema20 < htf_ema50 and current_price < htf_ema50:
+            return "bear"
+        return "range"
+
     # === Strategy Scorers ===
 
     def _score_trend(self, symbol: str, mark_price: float, closes: np.ndarray,
@@ -488,6 +519,14 @@ class ATRCalculator:
             conflict_penalty = min(long_score, short_score) * 0.3
             long_score -= conflict_penalty
             short_score -= conflict_penalty
+
+        # === Trend Regime Filter ===
+        # In strong bull: suppress shorts entirely; in strong bear: suppress longs
+        regime = self.detect_trend_regime(symbol)
+        if regime in ("strong_bull", "bull"):
+            short_score *= 0.1  # Heavily penalize counter-trend shorts
+        elif regime in ("strong_bear", "bear"):
+            long_score *= 0.1   # Heavily penalize counter-trend longs
 
         # Minimum score threshold
         MIN_SCORE = getattr(cfg, 'min_entry_score', 0.55)
