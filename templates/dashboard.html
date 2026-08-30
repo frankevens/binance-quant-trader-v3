@@ -334,6 +334,54 @@
             </div>
         </div>
 
+        <!-- V5 Backtest Results -->
+        <div class="panel" style="border-left: 4px solid #28a745;">
+            <div class="panel-header">
+                <span style="color: #28a745;">◆</span> V5 优化回测结果（1h 时间框架 + 多因子过滤）
+                <span style="float: right; font-size: 12px; color: #888;">TP +18% / SL -20% / 追踪止损</span>
+            </div>
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="label">Total Trades</div>
+                    <div class="value" id="v5TotalTrades">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Avg Win Rate</div>
+                    <div class="value" id="v5WinRate">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Total PnL</div>
+                    <div class="value" id="v5TotalPnl">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Avg Profit Factor</div>
+                    <div class="value" id="v5PF">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Avg Max Drawdown</div>
+                    <div class="value" id="v5DD">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Avg Holding</div>
+                    <div class="value" id="v5Holding">-</div>
+                </div>
+            </div>
+            <table style="width:100%;">
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Trades</th>
+                        <th>Win Rate</th>
+                        <th>PnL</th>
+                        <th>Profit Factor</th>
+                        <th>Max DD</th>
+                        <th>Avg Holding (bars)</th>
+                    </tr>
+                </thead>
+                <tbody id="v5Table"></tbody>
+            </table>
+        </div>
+
         <!-- Charts -->
         <div class="grid-2">
             <div class="panel">
@@ -665,8 +713,40 @@
             } catch (e) {}
         }
 
+        async function fetchV5() {
+            try {
+                const res = await fetch('/api/v5/summary');
+                const d = await res.json();
+                if (d.overall) {
+                    document.getElementById('v5TotalTrades').textContent = d.overall.total_trades;
+                    document.getElementById('v5WinRate').textContent = d.overall.win_rate + '%';
+                    document.getElementById('v5WinRate').className = 'value ' + (d.overall.win_rate >= 60 ? 'positive' : 'negative');
+                    const pnlEl = document.getElementById('v5TotalPnl');
+                    pnlEl.textContent = fmtPnl(d.overall.total_pnl);
+                    pnlEl.className = 'value ' + (d.overall.total_pnl >= 0 ? 'positive' : 'negative');
+                    document.getElementById('v5PF').textContent = d.overall.avg_profit_factor.toFixed(2);
+                    document.getElementById('v5PF').className = 'value ' + (d.overall.avg_profit_factor >= 1 ? 'positive' : 'negative');
+                    document.getElementById('v5DD').textContent = d.overall.avg_max_drawdown.toFixed(2) + '%';
+                    document.getElementById('v5Holding').textContent = d.overall.avg_holding_bars + ' bars';
+                }
+                if (d.symbols) {
+                    document.getElementById('v5Table').innerHTML = d.symbols.map(s => `
+                        <tr>
+                            <td><strong>${s.symbol}</strong></td>
+                            <td>${s.total_trades}</td>
+                            <td style="color:${s.win_rate >= 0.5 ? '#3fb950' : '#f85149'}">${(s.win_rate * 100).toFixed(1)}%</td>
+                            <td style="color:${s.total_pnl >= 0 ? '#3fb950' : '#f85149'}">${(s.total_pnl * 100).toFixed(2)}%</td>
+                            <td style="color:${s.profit_factor >= 1 ? '#3fb950' : '#f85149'}">${s.profit_factor ? s.profit_factor.toFixed(2) : 'N/A'}</td>
+                            <td>${s.max_drawdown ? s.max_drawdown.toFixed(2) + '%' : 'N/A'}</td>
+                            <td>${s.avg_bars ? s.avg_bars.toFixed(0) : 'N/A'}</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (e) {}
+        }
+
         async function refreshAll() {
-            await Promise.all([fetchStatus(), fetchPositions(), fetchTrades(), fetchDailyPnl(), fetchSymbols(), fetchConfig(), fetchBacktest(), fetchV4()]);
+            await Promise.all([fetchStatus(), fetchPositions(), fetchTrades(), fetchDailyPnl(), fetchSymbols(), fetchConfig(), fetchBacktest(), fetchV4(), fetchV5()]);
         }
 
         initCharts();

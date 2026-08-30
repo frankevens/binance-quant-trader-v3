@@ -327,6 +327,57 @@ def api_v4_trades():
         return jsonify({'error': str(e)})
 
 
+@app.route('/api/v5/summary')
+def api_v5_summary():
+    """Get V5 backtest summary"""
+    try:
+        conn = get_market_db()
+        data = []
+        rows = conn.execute("SELECT * FROM v5_backtest_results").fetchall()
+        for r in rows:
+            d = dict(r)
+            d['max_drawdown'] = round(d.get('max_drawdown', 0) * 100, 2)
+            data.append(d)
+        total_trades = sum(r['total_trades'] for r in data)
+        total_wins = sum(r['winners'] for r in data)
+        total_pnl = sum(r['total_pnl'] for r in data)
+        avg_wr = total_wins / total_trades * 100 if total_trades > 0 else 0
+        avg_pf = sum(r.get('profit_factor', 0) or 0 for r in data) / len(data) if data else 0
+        avg_dd = sum(r.get('max_drawdown', 0) or 0 for r in data) / len(data) if data else 0
+        avg_bars = sum(r.get('avg_bars', 0) or 0 for r in data) / len(data) if data else 0
+        return jsonify({
+            'symbols': data,
+            'overall': {
+                'total_trades': total_trades,
+                'win_rate': round(avg_wr, 1),
+                'total_pnl': round(total_pnl * 100, 2),
+                'avg_profit_factor': round(avg_pf, 2),
+                'avg_max_drawdown': round(avg_dd, 2),
+                'avg_holding_bars': round(avg_bars, 0),
+                'tp_target': 18,
+                'sl_target': -20,
+                'leverage': 10,
+                'version': 'V5'
+            }
+        })
+    except Exception as e:
+        return jsonify({'symbols': [], 'overall': {}, 'error': str(e)})
+
+
+@app.route('/api/v5/trades')
+def api_v5_trades():
+    """Get V5 backtest trade list"""
+    try:
+        conn = get_market_db()
+        rows = conn.execute(
+            "SELECT * FROM v5_backtest_trades ORDER BY entry_time DESC LIMIT 100"
+        ).fetchall()
+        conn.close()
+        return jsonify([dict(r) for r in rows])
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
 @app.route('/api/backtest/klines')
 def api_backtest_klines():
     """Get kline data for chart"""
