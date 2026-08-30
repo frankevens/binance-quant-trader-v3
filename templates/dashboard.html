@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binance Quant Trader V3 - Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            min-height: 100vh;
+        }
+        .header {
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #f0f6fc;
+        }
+        .header h1 span { color: #58a6ff; }
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #3fb950;
+            animation: pulse 2s infinite;
+        }
+        .status-dot.offline { background: #f85149; animation: none; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .stat-card .label {
+            font-size: 12px;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #f0f6fc;
+        }
+        .stat-card .value.positive { color: #3fb950; }
+        .stat-card .value.negative { color: #f85149; }
+        .stat-card .sub {
+            font-size: 12px;
+            color: #8b949e;
+            margin-top: 4px;
+        }
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        @media (max-width: 900px) {
+            .grid-2 { grid-template-columns: 1fr; }
+        }
+        .panel {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .panel-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #30363d;
+            font-size: 14px;
+            font-weight: 600;
+            color: #f0f6fc;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .panel-body {
+            padding: 16px 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th {
+            text-align: left;
+            padding: 8px 12px;
+            color: #8b949e;
+            font-weight: 500;
+            border-bottom: 1px solid #30363d;
+            position: sticky;
+            top: 0;
+            background: #161b22;
+        }
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #21262d;
+        }
+        tr:hover td { background: #1c2128; }
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .tag-long { background: #0d2818; color: #3fb950; }
+        .tag-short { background: #2d1117; color: #f85149; }
+        .tag-win { background: #0d2818; color: #3fb950; }
+        .tag-loss { background: #2d1117; color: #f85149; }
+        .tag-open { background: #1a2332; color: #58a6ff; }
+        .chart-container {
+            padding: 20px;
+            height: 300px;
+        }
+        .event-list {
+            list-style: none;
+        }
+        .event-item {
+            padding: 10px 0;
+            border-bottom: 1px solid #21262d;
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+        .event-time {
+            font-size: 11px;
+            color: #8b949e;
+            white-space: nowrap;
+            min-width: 70px;
+        }
+        .event-type {
+            font-size: 11px;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            min-width: 50px;
+            text-align: center;
+        }
+        .event-type.info { background: #1a2332; color: #58a6ff; }
+        .event-type.trade { background: #0d2818; color: #3fb950; }
+        .event-type.risk { background: #2d1117; color: #f85149; }
+        .event-msg {
+            font-size: 13px;
+            color: #c9d1d9;
+        }
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+        .config-item {
+            padding: 12px;
+            background: #0d1117;
+            border-radius: 6px;
+            text-align: center;
+        }
+        .config-item .k { font-size: 11px; color: #8b949e; margin-bottom: 4px; }
+        .config-item .v { font-size: 16px; font-weight: 600; color: #f0f6fc; }
+        .refresh-info {
+            text-align: center;
+            padding: 12px;
+            font-size: 12px;
+            color: #8b949e;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Binance Quant Trader <span>V3</span></h1>
+        <div class="status-badge">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Running</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="label">Total PnL</div>
+                <div class="value" id="totalPnl">$0.00</div>
+                <div class="sub" id="totalTrades">0 trades</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Win Rate</div>
+                <div class="value" id="winRate">0%</div>
+                <div class="sub" id="winLoss">0W / 0L</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Profit Factor</div>
+                <div class="value" id="profitFactor">0.00</div>
+                <div class="sub">Avg Win / Avg Loss</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Today PnL</div>
+                <div class="value" id="todayPnl">$0.00</div>
+                <div class="sub" id="todayTrades">0 trades today</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Open Positions</div>
+                <div class="value" id="openPositions">0</div>
+                <div class="sub" id="unrealizedPnl">Unrealized: $0.00</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="grid-2">
+            <div class="panel">
+                <div class="panel-header">Cumulative PnL</div>
+                <div class="chart-container">
+                    <canvas id="pnlChart"></canvas>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-header">Per-Symbol PnL</div>
+                <div class="chart-container">
+                    <canvas id="symbolChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Positions & Trades -->
+        <div class="grid-2">
+            <div class="panel">
+                <div class="panel-header">
+                    Open Positions
+                    <span id="posCount" style="font-size:12px;color:#8b949e">0</span>
+                </div>
+                <div class="panel-body">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Side</th>
+                                <th>Qty</th>
+                                <th>Entry</th>
+                                <th>PnL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="positionsTable"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-header">
+                    Recent Trades
+                    <span id="tradeCount" style="font-size:12px;color:#8b949e">0</span>
+                </div>
+                <div class="panel-body">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Side</th>
+                                <th>PnL</th>
+                                <th>Result</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradesTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Config & Events -->
+        <div class="grid-2">
+            <div class="panel">
+                <div class="panel-header">Strategy Config</div>
+                <div class="panel-body">
+                    <div class="config-grid" id="configGrid"></div>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-header">Recent Events</div>
+                <div class="panel-body">
+                    <ul class="event-list" id="eventList"></ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="refresh-info">
+            Auto-refresh every 5 seconds | Last update: <span id="lastUpdate">-</span>
+        </div>
+    </div>
+
+    <script>
+        let pnlChart, symbolChart;
+
+        function initCharts() {
+            const chartDefaults = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' } },
+                    y: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' } }
+                }
+            };
+
+            pnlChart = new Chart(document.getElementById('pnlChart'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        borderColor: '#58a6ff',
+                        backgroundColor: 'rgba(88,166,255,0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 2
+                    }]
+                },
+                options: { ...chartDefaults }
+            });
+
+            symbolChart = new Chart(document.getElementById('symbolChart'), {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: [],
+                        borderRadius: 4
+                    }]
+                },
+                options: { ...chartDefaults }
+            });
+        }
+
+        function fmt(n) {
+            return '$' + Number(n || 0).toFixed(2);
+        }
+
+        function fmtPnl(n) {
+            const v = Number(n || 0);
+            return (v >= 0 ? '+' : '') + '$' + v.toFixed(2);
+        }
+
+        function timeAgo(ts) {
+            const d = new Date(ts);
+            return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+        }
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const d = await res.json();
+                
+                document.getElementById('totalPnl').textContent = fmtPnl(d.total_pnl);
+                document.getElementById('totalPnl').className = 'value ' + (d.total_pnl >= 0 ? 'positive' : 'negative');
+                document.getElementById('totalTrades').textContent = d.total_trades + ' trades';
+                
+                document.getElementById('winRate').textContent = d.win_rate + '%';
+                document.getElementById('winRate').className = 'value ' + (d.win_rate >= 50 ? 'positive' : 'negative');
+                document.getElementById('winLoss').textContent = d.total_wins + 'W / ' + (d.total_trades - d.total_wins) + 'L';
+                
+                document.getElementById('profitFactor').textContent = d.profit_factor.toFixed(2);
+                document.getElementById('profitFactor').className = 'value ' + (d.profit_factor >= 1 ? 'positive' : 'negative');
+                
+                document.getElementById('todayPnl').textContent = fmtPnl(d.today_pnl);
+                document.getElementById('todayPnl').className = 'value ' + (d.today_pnl >= 0 ? 'positive' : 'negative');
+                document.getElementById('todayTrades').textContent = d.today_trades + ' trades today';
+                
+                document.getElementById('openPositions').textContent = d.open_positions;
+                document.getElementById('unrealizedPnl').textContent = 'Unrealized: ' + fmtPnl(d.unrealized_pnl);
+                
+                document.getElementById('statusDot').className = d.bot_running ? 'status-dot' : 'status-dot offline';
+                document.getElementById('statusText').textContent = d.bot_running ? 'Running' : 'Offline';
+                
+                // Events
+                const el = document.getElementById('eventList');
+                el.innerHTML = d.recent_events.map(e => `
+                    <li class="event-item">
+                        <span class="event-time">${timeAgo(e.created_at)}</span>
+                        <span class="event-type ${e.type}">${e.type}</span>
+                        <span class="event-msg">${e.message}</span>
+                    </li>
+                `).join('');
+                
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+            } catch (e) {
+                document.getElementById('statusDot').className = 'status-dot offline';
+                document.getElementById('statusText').textContent = 'Disconnected';
+            }
+        }
+
+        async function fetchPositions() {
+            try {
+                const res = await fetch('/api/positions');
+                const data = await res.json();
+                document.getElementById('posCount').textContent = data.length;
+                document.getElementById('positionsTable').innerHTML = data.map(p => `
+                    <tr>
+                        <td><strong>${p.symbol}</strong></td>
+                        <td><span class="tag tag-${p.side.toLowerCase()}">${p.side}</span></td>
+                        <td>${Number(p.quantity).toFixed(4)}</td>
+                        <td>$${Number(p.entry_price).toFixed(2)}</td>
+                        <td style="color:${p.unrealized_pnl >= 0 ? '#3fb950' : '#f85149'}">${fmtPnl(p.unrealized_pnl)}</td>
+                    </tr>
+                `).join('') || '<tr><td colspan="5" style="text-align:center;color:#8b949e">No open positions</td></tr>';
+            } catch (e) {}
+        }
+
+        async function fetchTrades() {
+            try {
+                const res = await fetch('/api/trades?limit=20');
+                const data = await res.json();
+                document.getElementById('tradeCount').textContent = data.length;
+                document.getElementById('tradesTable').innerHTML = data.map(t => `
+                    <tr>
+                        <td><strong>${t.symbol}</strong></td>
+                        <td><span class="tag tag-${t.side.toLowerCase()}">${t.side}</span></td>
+                        <td style="color:${t.realized_pnl >= 0 ? '#3fb950' : '#f85149'}">${fmtPnl(t.realized_pnl)}</td>
+                        <td><span class="tag ${t.realized_pnl >= 0 ? 'tag-win' : 'tag-loss'}">${t.realized_pnl >= 0 ? 'WIN' : 'LOSS'}</span></td>
+                        <td style="color:#8b949e;font-size:11px">${timeAgo(t.opened_at)}</td>
+                    </tr>
+                `).join('') || '<tr><td colspan="5" style="text-align:center;color:#8b949e">No trades yet</td></tr>';
+            } catch (e) {}
+        }
+
+        async function fetchDailyPnl() {
+            try {
+                const res = await fetch('/api/daily_pnl?days=30');
+                const data = await res.json();
+                if (data.length > 0) {
+                    pnlChart.data.labels = data.map(d => d.date.slice(5));
+                    pnlChart.data.datasets[0].data = data.map(d => d.cumulative_pnl);
+                    pnlChart.update();
+                }
+            } catch (e) {}
+        }
+
+        async function fetchSymbols() {
+            try {
+                const res = await fetch('/api/symbols');
+                const data = await res.json();
+                if (data.length > 0) {
+                    symbolChart.data.labels = data.map(d => d.symbol.replace('USDT', ''));
+                    symbolChart.data.datasets[0].data = data.map(d => d.total_pnl);
+                    symbolChart.data.datasets[0].backgroundColor = data.map(d => d.total_pnl >= 0 ? '#3fb950' : '#f85149');
+                    symbolChart.update();
+                }
+            } catch (e) {}
+        }
+
+        async function fetchConfig() {
+            try {
+                const res = await fetch('/api/config');
+                const d = await res.json();
+                const items = [
+                    ['Symbols', d.symbols.length],
+                    ['Leverage', d.leverage + 'x'],
+                    ['Margin', d.margin_type],
+                    ['Interval', d.kline_interval],
+                    ['Min Score', d.min_entry_score],
+                    ['SL', d.sl_mult + ' ATR'],
+                    ['TP1', d.tp1_rr + 'R'],
+                    ['TP2', d.tp2_rr + 'R'],
+                    ['TP3', d.tp3_rr + 'R'],
+                    ['Risk/Trade', (d.risk_per_trade * 100) + '%'],
+                    ['Max Daily Loss', (d.max_daily_loss_pct * 100) + '%'],
+                    ['Max Exposure', (d.max_total_exposure_pct * 100) + '%'],
+                ];
+                document.getElementById('configGrid').innerHTML = items.map(([k, v]) => `
+                    <div class="config-item">
+                        <div class="k">${k}</div>
+                        <div class="v">${v}</div>
+                    </div>
+                `).join('');
+            } catch (e) {}
+        }
+
+        async function refreshAll() {
+            await Promise.all([fetchStatus(), fetchPositions(), fetchTrades(), fetchDailyPnl(), fetchSymbols(), fetchConfig()]);
+        }
+
+        initCharts();
+        refreshAll();
+        setInterval(refreshAll, 5000);
+    </script>
+</body>
+</html>

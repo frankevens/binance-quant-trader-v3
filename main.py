@@ -254,6 +254,7 @@ async def main():
     parser = argparse.ArgumentParser(description="Binance Quant Trader V3")
     parser.add_argument("--config", type=str, help="Path to custom config module")
     parser.add_argument("--dry-run", action="store_true", help="Validate config and exit")
+    parser.add_argument("--web", action="store_true", help="Start web dashboard only")
     args = parser.parse_args()
 
     # Load config
@@ -268,6 +269,15 @@ async def main():
     # Setup logging
     setup_logging(cfg)
     logger = logging.getLogger("trader.main")
+
+    # Web dashboard mode
+    if args.web:
+        from web_dashboard import app as dashboard_app
+        print_banner(cfg)
+        print("  Mode: Web Dashboard")
+        print("=" * 60 + "\n")
+        dashboard_app.run(host="0.0.0.0", port=5000, debug=False)
+        return
 
     # Dry run mode
     if args.dry_run:
