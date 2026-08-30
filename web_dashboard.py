@@ -226,7 +226,15 @@ def api_backtest_summary():
             "FROM backtest_results ORDER BY total_pnl DESC"
         ).fetchall()
         conn.close()
-        data = [dict(r) for r in rows]
+        data = []
+        for r in rows:
+            d = dict(r)
+            # Fix Infinity values
+            if d.get('avg_rr') == float('inf') or d.get('avg_rr') == float('-inf'):
+                d['avg_rr'] = None
+            # Convert drawdown to percentage
+            d['max_drawdown'] = round(d['max_drawdown'] * 100, 2)
+            data.append(d)
         # Calculate overall stats
         total_trades = sum(r['total_trades'] for r in data)
         total_wins = sum(r['winners'] for r in data)
