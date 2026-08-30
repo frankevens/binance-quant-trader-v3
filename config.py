@@ -33,14 +33,14 @@ class RiskConfig:
 class ATRConfig:
     """ATR-based stop loss / take profit parameters (V3 Ultimate)."""
     atr_period: int = 14
-    atr_sl_multiplier: float = 1.0       # Tight stop: 1.0x ATR → higher win rate
+    atr_sl_multiplier: float = 0.8       # Optimized: tighter stop for better R:R
     atr_tp_multiplier: float = 8.0       # Max target: 8x ATR (via trailing)
     atr_trailing_multiplier: float = 1.5 # Trailing: 1.5x ATR
     kline_interval: str = "15m"
     kline_limit: int = 100
     htf_interval: str = "1h"
     htf_kline_limit: int = 60
-    min_entry_score: float = 0.55        # Lower threshold = more signals
+    min_entry_score: float = 0.65        # Higher threshold = fewer but higher quality signals
 
     # Partial take profit: the key to high win rate + high R:R
     # 50% closes at 2R (locks win), 25% at 4R, 25% trails to 8R
@@ -49,7 +49,7 @@ class ATRConfig:
     partial_tp_tp2_pct: float = 0.25
     partial_tp_tp3_pct: float = 0.25
     partial_tp_tp1_rr: float = 2.0       # TP1 at 2R
-    partial_tp_tp2_rr: float = 4.0       # TP2 at 4R
+    partial_tp_tp2_rr: float = 3.0       # TP2 at 3R (optimized)
     partial_tp_tp3_rr: float = 8.0       # TP3 at 8R
     partial_tp_move_sl_to_be: bool = True # Move SL to breakeven after TP1
 

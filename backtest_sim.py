@@ -169,12 +169,12 @@ def simulate_backtest(market_type="mixed"):
     bb_u, bb_m, bb_l = calculate_bollinger(closes, 20)
     
     # Strategy parameters
-    sl_mult = 1.0
+    sl_mult = 0.8
     tp1_rr = 2.0
-    tp2_rr = 4.0
+    tp2_rr = 3.0
     tp3_rr = 8.0
     trail_mult = 1.5
-    min_score = 0.55
+    min_score = 0.65
     tp1_pct = 0.50
     tp2_pct = 0.25
     
